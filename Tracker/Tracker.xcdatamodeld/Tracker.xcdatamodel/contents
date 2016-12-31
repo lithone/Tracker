@@ -1,4 +1,22 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="1" systemVersion="11A491" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
-    <elements/>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="11759" systemVersion="16C67" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+    <entity name="TrackMessage" representedClassName="TrackMessage" syncable="YES" codeGenerationType="class">
+        <attribute name="batteryState" optional="YES" attributeType="String" syncable="YES"/>
+        <attribute name="id" optional="YES" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES" syncable="YES"/>
+        <attribute name="latitude" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES" syncable="YES"/>
+        <attribute name="longitude" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES" syncable="YES"/>
+        <attribute name="senderId" optional="YES" attributeType="String" syncable="YES"/>
+        <attribute name="senderName" optional="YES" attributeType="String" syncable="YES"/>
+        <attribute name="time" optional="YES" attributeType="Date" usesScalarValueType="NO" syncable="YES"/>
+        <attribute name="type" optional="YES" attributeType="String" syncable="YES"/>
+        <relationship name="trackMessageChain" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="TrackMessageChain" inverseName="trackMessages" inverseEntity="TrackMessageChain" syncable="YES"/>
+    </entity>
+    <entity name="TrackMessageChain" representedClassName="TrackMessageChain" syncable="YES" codeGenerationType="class">
+        <attribute name="firstMessageId" optional="YES" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES" syncable="YES"/>
+        <relationship name="trackMessages" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="TrackMessage" inverseName="trackMessageChain" inverseEntity="TrackMessage" syncable="YES"/>
+    </entity>
+    <elements>
+        <element name="TrackMessageChain" positionX="-243" positionY="18" width="128" height="73"/>
+        <element name="TrackMessage" positionX="-54" positionY="-9" width="128" height="178"/>
+    </elements>
 </model>

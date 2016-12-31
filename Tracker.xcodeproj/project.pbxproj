@@ -13,6 +13,8 @@
 		3E2104821E180CA6007D4A88 /* Tracker.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 3E2104801E180CA6007D4A88 /* Tracker.xcdatamodeld */; };
 		3E2104841E180CA6007D4A88 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3E2104831E180CA6007D4A88 /* Assets.xcassets */; };
 		3E2104871E180CA6007D4A88 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 3E2104851E180CA6007D4A88 /* LaunchScreen.storyboard */; };
+		3E21048F1E181B5E007D4A88 /* SpotDataRetreiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E21048E1E181B5E007D4A88 /* SpotDataRetreiver.swift */; };
+		3E2104911E181BE2007D4A88 /* Settings.bundle in Resources */ = {isa = PBXBuildFile; fileRef = 3E2104901E181BE2007D4A88 /* Settings.bundle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -24,6 +26,8 @@
 		3E2104831E180CA6007D4A88 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		3E2104861E180CA6007D4A88 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		3E2104881E180CA6007D4A88 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		3E21048E1E181B5E007D4A88 /* SpotDataRetreiver.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SpotDataRetreiver.swift; sourceTree = "<group>"; };
+		3E2104901E181BE2007D4A88 /* Settings.bundle */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.plug-in"; path = Settings.bundle; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -59,6 +63,8 @@
 				3E2104791E180CA6007D4A88 /* AppDelegate.swift */,
 				3E21047B1E180CA6007D4A88 /* ViewController.swift */,
 				3E21047D1E180CA6007D4A88 /* Main.storyboard */,
+				3E21048E1E181B5E007D4A88 /* SpotDataRetreiver.swift */,
+				3E2104901E181BE2007D4A88 /* Settings.bundle */,
 				3E2104831E180CA6007D4A88 /* Assets.xcassets */,
 				3E2104851E180CA6007D4A88 /* LaunchScreen.storyboard */,
 				3E2104881E180CA6007D4A88 /* Info.plist */,
@@ -127,6 +133,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3E2104911E181BE2007D4A88 /* Settings.bundle in Resources */,
 				3E2104871E180CA6007D4A88 /* LaunchScreen.storyboard in Resources */,
 				3E2104841E180CA6007D4A88 /* Assets.xcassets in Resources */,
 				3E21047F1E180CA6007D4A88 /* Main.storyboard in Resources */,
@@ -142,6 +149,7 @@
 			files = (
 				3E21047C1E180CA6007D4A88 /* ViewController.swift in Sources */,
 				3E21047A1E180CA6007D4A88 /* AppDelegate.swift in Sources */,
+				3E21048F1E181B5E007D4A88 /* SpotDataRetreiver.swift in Sources */,
 				3E2104821E180CA6007D4A88 /* Tracker.xcdatamodeld in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
