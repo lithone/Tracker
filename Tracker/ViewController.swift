@@ -28,7 +28,7 @@ class ViewController: UIViewController {
         dataRetreiver.loginInfo.feedID = UserDefaults.standard.string(forKey: "feedID")
         dataRetreiver.loginInfo.feedPassword = UserDefaults.standard.string(forKey: "feedPassword")
         
-        dataRetreiver.retreiveData()
+        dataRetreiver.refreshData()
     }
 }
 
