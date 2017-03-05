@@ -30,7 +30,7 @@
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>Enabled</string>
+			<string>Password</string>
 			<key>Key</key>
 			<string>feedPassword</string>
 			<key>KeyboardType</key>

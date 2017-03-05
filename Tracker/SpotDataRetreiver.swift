@@ -8,6 +8,7 @@
 
 import Foundation
 import CoreData
+import UIKit
 
 enum DataRetreiveOperation: Equatable {
     case retreiveAll
@@ -53,6 +54,10 @@ struct DataRetreiveOperationQueue {
         return element
     }
     
+    mutating func clear() {
+        array.removeAll()
+    }
+    
     func peek() -> DataRetreiveOperation? {
         return array.first
     }
@@ -69,6 +74,7 @@ struct SpotLoginInfo {
     var minRefreshSeconds: Double = 150.0
     var idleRefreshSeconds: Double = 300.0
     var lastRefreshTime: Date?
+ 
     
     func getFeedURL(fromTime: Date? = nil, toTime: Date? = nil, messageIndexStart: Int? = nil) -> String? {
         guard feedId != nil else {
@@ -85,9 +91,7 @@ struct SpotLoginInfo {
     }
 }
 
-class SpotDataRetreiver: NSObject, XMLParserDelegate {
-    var loginInfo = SpotLoginInfo()
-    var managedObjectContext: NSManagedObjectContext?
+class SpotDataRetreiver: NSObject, XMLParserDelegate, URLSessionDownloadDelegate {
     private var dataRetreiveOperationQueue = DataRetreiveOperationQueue()
     private var refreshTimer: Timer?
     private var refreshTimerFiredOnce = false
@@ -95,6 +99,14 @@ class SpotDataRetreiver: NSObject, XMLParserDelegate {
     private var currentTrackMessage: TrackMessage?
     private var currentTrackMessageChain: TrackMessageChain?
     private var pageMessageCount = 0
+    private var XMLBuffer: String = ""
+    var downloadTask: URLSessionDownloadTask!
+    var backgroundSession: URLSession!
+    var backgroundFetchCompletionHandler: ((UIBackgroundFetchResult) -> Void)?
+
+
+    var loginInfo = SpotLoginInfo()
+    var managedObjectContext: NSManagedObjectContext?
     
     init(feedId: String, feedPassword: String, context: NSManagedObjectContext) {
         super.init()
@@ -103,130 +115,15 @@ class SpotDataRetreiver: NSObject, XMLParserDelegate {
         loginInfo.feedId = feedId
         loginInfo.feedPassword = feedPassword
         managedObjectContext = context
-        
-        refreshData()
-        let userDefaults = UserDefaults.standard
-        if let lastRefreshTime = userDefaults.object(forKey: "LastRefreshTime") as? Date {
-            // Set the timer to fire at the next allowble interval, measured from the last time it fired.
-            // If the timer never fired, it can be set with the proper minimum interval and fired for the first time immediately. If it has fired, it must be ensured that a sufficient interval has passed before firing it again.
-            print("last refresh time \(lastRefreshTime)")
-            let nextAllowableInterval: Double = (Calendar.current.date(byAdding: .second, value: Int(loginInfo.minRefreshSeconds), to: lastRefreshTime)!.timeIntervalSince(Date())) as Double
-            print("time \(Date()), next interval \(nextAllowableInterval)")
-            print("nextAllowableInterval \(nextAllowableInterval)")
-            if nextAllowableInterval < 0 {
-                refreshTimerNeedsProperInterval = false
-                createRefreshTimer(interval: loginInfo.minRefreshSeconds, repeats: true)
-                refreshTimer?.fire()
-            } else {
-                createRefreshTimer(interval: nextAllowableInterval, repeats: false)
-                refreshTimerNeedsProperInterval = true
-            }
-        } else {
-            refreshTimerNeedsProperInterval = false
-            createRefreshTimer(interval: loginInfo.minRefreshSeconds, repeats: true)
-            refreshTimer?.fire()
-        }
     }
     
-    private func createRefreshTimer(interval: Double, repeats: Bool) {
-        refreshTimer?.invalidate()
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: repeats) { _ in
-            let queue = DispatchQueue(label: "DataRetreiveQueue", qos: .userInitiated)
-            queue.async {
-                print("Timer fired at \(Date())")
-                if self.refreshTimerNeedsProperInterval {
-                    self.createRefreshTimer(interval: self.loginInfo.minRefreshSeconds, repeats: true)
-                    self.refreshTimerNeedsProperInterval = false
-                }
-                if let operationToExecute = self.dataRetreiveOperationQueue.peek() {
-                    print("refresh timer fired at \(Date()) with \(operationToExecute)")
-                    switch operationToExecute {
-                    case .retreiveAll:
-                        // Get the first 50 messages. If 50 messages are returned, there may be more, so fetch the next batch of 50.
-                        if let feedUrlFull = self.loginInfo.getFeedURL() {
-                            print(feedUrlFull)
-                            if let url = URL(string: feedUrlFull) {
-                                self.loginInfo.lastRefreshTime = Date()
-                                if let xmlParser = XMLParser(contentsOf: url) {
-                                    xmlParser.delegate = self
-                                    _ = xmlParser.parse()
-                                    _ = self.dataRetreiveOperationQueue.dequeue()
-                                    UserDefaults.standard.set(Date(), forKey: "LastRefreshTime")
-                                    if self.pageMessageCount == 50 {
-                                        self.dataRetreiveOperationQueue.enqueue(.retreiveFromMessageIndex(51))
-                                    } else {
-                                        self.refreshData()
-                                    }
-                                }
-                            }
-                        }
-                    case let .retreiveFromMessageIndex(messageIndex): 
-                        // Get the first 50 messages starting from messageIndex. If 50 messages are returned, there may be more, so fetch the next batch of 50.
-                        if let feedUrlFull = self.loginInfo.getFeedURL(fromTime: nil, toTime: nil, messageIndexStart: messageIndex) {
-                            print(feedUrlFull)
-                            if let url = URL(string: feedUrlFull) {
-                                self.loginInfo.lastRefreshTime = Date()
-                                if let xmlParser = XMLParser(contentsOf: url) {
-                                    xmlParser.delegate = self
-                                    _ = xmlParser.parse()
-                                    _ = self.dataRetreiveOperationQueue.dequeue()
-                                    UserDefaults.standard.set(Date(), forKey: "LastRefreshTime")
-                                    if self.pageMessageCount == 50 {
-                                        self.dataRetreiveOperationQueue.enqueue(.retreiveFromMessageIndex(messageIndex + 50))
-                                    } else {
-                                        self.refreshData()
-                                    }
-                                }
-                            }
-                        }
-                    case let .retreiveFromMessageTime(messageTime):
-                        // Get the first 50 messages starting from messageTime. If 50 messages are returned, there may be more, so fetch the next batch of 50.
-                        if let feedUrlFull = self.loginInfo.getFeedURL(fromTime: messageTime, toTime: nil, messageIndexStart: nil) {
-                            print(feedUrlFull)
-                            if let url = URL(string: feedUrlFull) {
-                                self.loginInfo.lastRefreshTime = Date()
-                                if let xmlParser = XMLParser(contentsOf: url) {
-                                    xmlParser.delegate = self
-                                    _ = xmlParser.parse()
-                                    _ = self.dataRetreiveOperationQueue.dequeue()
-                                    UserDefaults.standard.set(Date(), forKey: "LastRefreshTime")
-                                    if self.pageMessageCount == 50 {
-                                        self.dataRetreiveOperationQueue.enqueue(.retreiveFromMessageTimeAndIndex(messageTime, 51))
-                                    } else {
-                                        self.refreshData()
-                                    }
-                                }
-                            }
-                        }
-                    case let .retreiveFromMessageTimeAndIndex(messageTime, messageIndex):
-                        // Get the first 50 messages starting from messageTime and messageIndex. If 50 messages are returned, there may be more, so fetch the next batch of 50.
-                        if let feedUrlFull = self.loginInfo.getFeedURL(fromTime: messageTime, toTime: nil, messageIndexStart: messageIndex) {
-                            print(feedUrlFull)
-                            if let url = URL(string: feedUrlFull) {
-                                self.loginInfo.lastRefreshTime = Date()
-                                if let xmlParser = XMLParser(contentsOf: url) {
-                                    xmlParser.delegate = self
-                                    _ = xmlParser.parse()
-                                    _ = self.dataRetreiveOperationQueue.dequeue()
-                                    UserDefaults.standard.set(Date(), forKey: "LastRefreshTime")
-                                    if self.pageMessageCount == 50 {
-                                        self.dataRetreiveOperationQueue.enqueue(.retreiveFromMessageTimeAndIndex(messageTime, messageIndex + 50))
-                                    } else {
-                                        self.refreshData()
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    func refreshData(forceRefreshAll: Bool = false) {
-        // If there is no recorded last message time, do a full refresh paging through all the data. Otherwise, refresh since the last message time (unless a forceRefreshAll was requested).
+    func orderMessageRefresh(forceRefreshAll: Bool = false) {
+        // If there is no recorded last message time, order a full refresh paging through all the data. Otherwise, order a refresh since the last message time (unless a forceRefreshAll was requested).
         
-        // Get the last message time. 
+        // Clear all pending refresh operations. 
+        dataRetreiveOperationQueue.clear()
+        
+        // Get the last message time.
         var lastMessageTime: Date? = nil
         let request = NSFetchRequest<NSFetchRequestResult>(entityName: "TrackMessage")
         request.fetchLimit = 1
@@ -256,8 +153,143 @@ class SpotDataRetreiver: NSObject, XMLParserDelegate {
             }
         }
     }
+
+    func resumeMessageRefreshing() {
+        print("Resuming message refresh \(Date())")
+        let userDefaults = UserDefaults.standard
+        if let lastRefreshTime = userDefaults.object(forKey: "LastRefreshTime") as? Date {
+            // Set the timer to fire at the next allowble interval, measured from the last time it fired.
+            // If the timer never fired, it can be set with the proper minimum interval and fired for the first time immediately. If it has fired, it must be ensured that a sufficient interval has passed before firing it again.
+            print("last refresh time \(lastRefreshTime)")
+            let nextAllowableInterval: Double = (Calendar.current.date(byAdding: .second, value: Int(loginInfo.minRefreshSeconds), to: lastRefreshTime)!.timeIntervalSince(Date())) as Double
+            print("time \(Date()), next interval \(nextAllowableInterval)")
+            print("nextAllowableInterval \(nextAllowableInterval)")
+            if nextAllowableInterval < 0 {
+                refreshTimerNeedsProperInterval = false
+                createRefreshTimer(interval: loginInfo.minRefreshSeconds, repeats: true)
+                refreshTimer?.fire()
+            } else {
+                createRefreshTimer(interval: nextAllowableInterval, repeats: false)
+                refreshTimerNeedsProperInterval = true
+            }
+        } else {
+            refreshTimerNeedsProperInterval = false
+            createRefreshTimer(interval: loginInfo.minRefreshSeconds, repeats: true)
+            refreshTimer?.fire()
+        }
+    }
     
-    private var buffer: String = ""
+    func pauseMessageRefreshing() {
+        print("Pausing message refresh \(Date())")
+        refreshTimer?.invalidate()
+        //refreshTimer = nil
+    }
+    
+    private func createRefreshTimer(interval: Double, repeats: Bool) {
+        refreshTimer?.invalidate()
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: repeats) { _ in
+            let queue = DispatchQueue(label: "SpotDataRetreiver", qos: .userInitiated)
+            queue.async {
+                print("Timer fired at \(Date())")
+                if self.refreshTimerNeedsProperInterval {
+                    self.createRefreshTimer(interval: self.loginInfo.minRefreshSeconds, repeats: true)
+                    self.refreshTimerNeedsProperInterval = false
+                }
+                if let operationToExecute = self.dataRetreiveOperationQueue.peek() {
+                    print("refresh timer fired at \(Date()) with \(operationToExecute)")
+                    switch operationToExecute {
+                    case .retreiveAll:
+                        // Get the first 50 messages. If 50 messages are returned, there may be more, so fetch the next batch of 50.
+                        if let feedUrlFull = self.loginInfo.getFeedURL() {
+                            print(feedUrlFull)
+                            if let url = URL(string: feedUrlFull) {
+                                self.loginInfo.lastRefreshTime = Date()
+                                self.downloadData(url: url)
+                                _ = self.dataRetreiveOperationQueue.dequeue()
+                                UserDefaults.standard.set(Date(), forKey: "LastRefreshTime")
+                                if self.pageMessageCount == 50 {
+                                    self.dataRetreiveOperationQueue.enqueue(.retreiveFromMessageIndex(51))
+                                } else {
+                                    self.orderMessageRefresh()
+                                }
+                            }
+                        }
+                    case let .retreiveFromMessageIndex(messageIndex): 
+                        // Get the first 50 messages starting from messageIndex. If 50 messages are returned, there may be more, so fetch the next batch of 50.
+                        if let feedUrlFull = self.loginInfo.getFeedURL(fromTime: nil, toTime: nil, messageIndexStart: messageIndex) {
+                            print(feedUrlFull)
+                            if let url = URL(string: feedUrlFull) {
+                                self.loginInfo.lastRefreshTime = Date()
+                                self.downloadData(url: url)
+                                _ = self.dataRetreiveOperationQueue.dequeue()
+                                UserDefaults.standard.set(Date(), forKey: "LastRefreshTime")
+                                if self.pageMessageCount == 50 {
+                                    self.dataRetreiveOperationQueue.enqueue(.retreiveFromMessageIndex(messageIndex + 50))
+                                } else {
+                                    self.orderMessageRefresh()
+                                }
+                            }
+                        }
+                    case let .retreiveFromMessageTime(messageTime):
+                        // Get the first 50 messages starting from messageTime. If 50 messages are returned, there may be more, so fetch the next batch of 50.
+                        if let feedUrlFull = self.loginInfo.getFeedURL(fromTime: messageTime, toTime: nil, messageIndexStart: nil) {
+                            print(feedUrlFull)
+                            if let url = URL(string: feedUrlFull) {
+                                self.loginInfo.lastRefreshTime = Date()
+                                self.downloadData(url: url)
+                                _ = self.dataRetreiveOperationQueue.dequeue()
+                                UserDefaults.standard.set(Date(), forKey: "LastRefreshTime")
+                                if self.pageMessageCount == 50 {
+                                    self.dataRetreiveOperationQueue.enqueue(.retreiveFromMessageTimeAndIndex(messageTime, 51))
+                                } else {
+                                    self.orderMessageRefresh()
+                                }
+                            }
+                        }
+                    case let .retreiveFromMessageTimeAndIndex(messageTime, messageIndex):
+                        // Get the first 50 messages starting from messageTime and messageIndex. If 50 messages are returned, there may be more, so fetch the next batch of 50.
+                        if let feedUrlFull = self.loginInfo.getFeedURL(fromTime: messageTime, toTime: nil, messageIndexStart: messageIndex) {
+                            print(feedUrlFull)
+                            if let url = URL(string: feedUrlFull) {
+                                self.loginInfo.lastRefreshTime = Date()
+                                self.downloadData(url: url)
+                                _ = self.dataRetreiveOperationQueue.dequeue()
+                                UserDefaults.standard.set(Date(), forKey: "LastRefreshTime")
+                                if self.pageMessageCount == 50 {
+                                    self.dataRetreiveOperationQueue.enqueue(.retreiveFromMessageTimeAndIndex(messageTime, messageIndex + 50))
+                                } else {
+                                    self.orderMessageRefresh()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private func downloadData(url: URL) {
+        let backgroundSessionConfiguration = URLSessionConfiguration.background(withIdentifier: "SpotDataRetreiver")
+        backgroundSession = URLSession(configuration: backgroundSessionConfiguration, delegate: self, delegateQueue: nil)
+        downloadTask = backgroundSession.downloadTask(with: url)
+        downloadTask.resume()
+    }
+    
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        if let xmlParser = XMLParser(contentsOf: location) {
+            xmlParser.delegate = self
+            _ = xmlParser.parse()
+        }
+    }
+    
+    public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        print("didCompleteWithError \(Date())")
+        backgroundSession.finishTasksAndInvalidate()
+        if backgroundFetchCompletionHandler != nil {
+            backgroundFetchCompletionHandler!(UIBackgroundFetchResult.newData)
+            backgroundFetchCompletionHandler = nil
+        }
+    }
     
     func parserDidStartDocument(_ parser: XMLParser) {
         pageMessageCount = 0
@@ -268,14 +300,14 @@ class SpotDataRetreiver: NSObject, XMLParserDelegate {
         do {
             try managedObjectContext?.save()
             print("Saved")
-        } catch let error {
+        } catch _ {
             print("Unable to save refresh objects to CoreData. ")
         }
         print("End of XML \(Date())")
     }
     
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String : String] = [:]) {
-        buffer = ""
+        XMLBuffer = ""
         switch elementName {
         case "message":
             // Create a new TrackMessage.
@@ -315,43 +347,47 @@ class SpotDataRetreiver: NSObject, XMLParserDelegate {
             pageMessageCount += 1
             currentTrackMessage = nil
         case "id":
-            let id = Int64(buffer)
+            let id = Int64(XMLBuffer)
             currentTrackMessage?.setValue(id, forKey: "id")
         case "messengerId":
-            let senderId = buffer.isEmpty ? nil : buffer as String?
+            let senderId = XMLBuffer.isEmpty ? nil : XMLBuffer as String?
             currentTrackMessage?.setValue(senderId, forKey: "senderId")
         case "messengerName":
-            let senderName = buffer.isEmpty ? nil : buffer as String?
+            let senderName = XMLBuffer.isEmpty ? nil : XMLBuffer as String?
             currentTrackMessage?.setValue(senderName, forKey: "senderName")
         case "messageType":
-            if let type = TrackMessage.MessageType(rawValue: buffer) {
+            if let type = TrackMessage.MessageType(rawValue: XMLBuffer) {
                 let t = "\(type)"
                 currentTrackMessage?.setValue(t, forKey: "type")
             }
         case "latitude":
-            let latitude = Double(buffer)
+            let latitude = Double(XMLBuffer)
             currentTrackMessage?.setValue(latitude, forKey: "latitude")
         case "longitude":
-            let longitude = Double(buffer)
+            let longitude = Double(XMLBuffer)
             currentTrackMessage?.setValue(longitude, forKey: "longitude")
         case "dateTime":
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
-            let time = dateFormatter.date(from: buffer)
+            let time = dateFormatter.date(from: XMLBuffer)
             currentTrackMessage?.setValue(time, forKey: "time")
         case "batteryState":
-            if let batteryState = TrackMessage.BatteryState(rawValue: buffer) {
+            if let batteryState = TrackMessage.BatteryState(rawValue: XMLBuffer) {
                 let bs = "\(batteryState)"
                 currentTrackMessage?.setValue(bs, forKey: "batteryState")
             }
         default: break
         }
         
-        print("\(buffer)")
+        print("\(XMLBuffer)")
         print("End of \(elementName)")
     }
     
     func parser(_ parser: XMLParser, foundCharacters string: String) {
-        buffer += string
+        XMLBuffer += string
+    }
+    
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didReceive data: Data) {
+        
     }
 }
